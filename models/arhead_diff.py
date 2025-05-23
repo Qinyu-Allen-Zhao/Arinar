@@ -13,8 +13,9 @@ from diffusion import create_diffusion
 
 class ARHead_diff(nn.Module):
     def __init__(self, token_embed_dim, decoder_embed_dim, inner_ar_width=768, 
-                 inner_ar_depth=1, num_sampling_steps='100', head_width=1024, head_depth=6,
-                 feature_group=1, head_batch_mul=1):
+                 inner_ar_depth=1, head_width=1024, head_depth=6,
+                 feature_group=1, head_batch_mul=1,
+                 diff_upper_steps=25, diff_lower_steps=5, diff_sampling_strategy="linear"):
         super(ARHead_diff, self).__init__()
         assert token_embed_dim % feature_group == 0, "token_embed_dim must be divisible by feature_group"
 
@@ -60,7 +61,19 @@ class ARHead_diff(nn.Module):
         )
 
         self.train_diffusion = create_diffusion(timestep_respacing="", noise_schedule="cosine")
-        self.gen_diffusion = create_diffusion(timestep_respacing=num_sampling_steps, noise_schedule="cosine")
+        self.use_ddim = True
+        if self.use_ddim:
+            self.gen_diffusion = [
+                create_diffusion(timestep_respacing="ddim"+str(step), noise_schedule="cosine")
+                for step in range(diff_lower_steps, diff_upper_steps+1, 1)
+            ]
+        else:
+            self.gen_diffusion = [
+                create_diffusion(timestep_respacing=str(step), noise_schedule="cosine")
+                for step in range(diff_lower_steps, diff_upper_steps+1, 1)
+            ]
+
+        self.diff_sampling_strategy = diff_sampling_strategy
         self.head_batch_mul = head_batch_mul
 
     def forward(self, z, target, mask=None):
@@ -85,7 +98,7 @@ class ARHead_diff(nn.Module):
             loss = (loss * mask).sum() / mask.sum()
         return loss.mean()
 
-    def sample(self, z, temperature=1.0, cfg=1.0, top_p=0.99):
+    def sample(self, z, temperature=1.0, cfg=1.0, top_p=0.99, step=0, ar_num_iter=64):
         bsz = z.shape[0]
 
         start = self.cond_proj(z).unsqueeze(1) + self.start_token.expand(bsz, 1, -1)
@@ -109,10 +122,26 @@ class ARHead_diff(nn.Module):
                 model_kwargs = dict(c=x.squeeze(1))
                 sample_fn = self.net.forward
 
-            sampled_token_latent = self.gen_diffusion.p_sample_loop(
-                sample_fn, noise.shape, noise, clip_denoised=False, model_kwargs=model_kwargs, progress=False,
-                temperature=temperature
-            )
+            upper_step = ar_num_iter - 1
+            if self.diff_sampling_strategy == "linear":
+                schedule_id = int((upper_step-step) / upper_step * (len(self.gen_diffusion)-1))
+            elif self.diff_sampling_strategy == "cosine":
+                schedule_id = int((math.cos(math.pi * step / upper_step) + 1) / 2 * (len(self.gen_diffusion)-1))
+            elif self.diff_sampling_strategy == "constant":
+                schedule_id = 0 # Constant schedule
+            elif self.diff_sampling_strategy == "two-stage":
+                schedule_id = len(self.gen_diffusion) - 1 if step < upper_step / 2 else 0
+            else:
+                raise ValueError(f"Unknown sampling strategy: {self.diff_sampling_strategy}")
+            if not self.use_ddim:
+                sampled_token_latent = self.gen_diffusion[schedule_id].p_sample_loop(
+                    sample_fn, noise.shape, noise, clip_denoised=False, model_kwargs=model_kwargs, progress=False,
+                    temperature=temperature
+                )
+            else:
+                sampled_token_latent = self.gen_diffusion[schedule_id].ddim_sample_loop(
+                    sample_fn, noise.shape, noise, clip_denoised=False, model_kwargs=model_kwargs, progress=False
+                )
 
             res.append(sampled_token_latent)
 

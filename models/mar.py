@@ -116,9 +116,11 @@ class MAR(nn.Module):
             self.arhead = ARHead_diff(token_embed_dim=self.token_embed_dim,
                                     decoder_embed_dim=decoder_embed_dim, inner_ar_width=inner_ar_width,
                                     inner_ar_depth=inner_ar_depth, head_width=head_width, head_depth=head_depth,
-                                    num_sampling_steps=kwargs.get("num_sampling_steps", "50"),
                                     feature_group=kwargs.get("feature_group", 1),
-                                    head_batch_mul=head_batch_mul)
+                                    head_batch_mul=head_batch_mul,
+                                    diff_upper_steps=kwargs.get("diff_upper_steps", 25),
+                                    diff_lower_steps=kwargs.get("diff_lower_steps", 5),
+                                    diff_sampling_strategy=kwargs.get("diff_sampling_strategy", "linear"))
         elif head_type == "ar_rect_flow":
             self.arhead = ARHead_rect_flow(token_embed_dim=self.token_embed_dim,
                                     decoder_embed_dim=decoder_embed_dim, inner_ar_width=inner_ar_width,
@@ -131,15 +133,20 @@ class MAR(nn.Module):
         elif head_type == "rect_flow":
             self.diffloss = RectFlowHead(token_embed_dim=self.token_embed_dim,
                                     decoder_embed_dim=decoder_embed_dim,
-                                    num_sampling_steps=kwargs.get("num_sampling_steps", "50"),
-                                    head_width=head_width, head_depth=head_depth)
+                                    head_width=head_width, head_depth=head_depth,
+                                    diff_upper_steps=kwargs.get("diff_upper_steps", 25),
+                                    diff_lower_steps=kwargs.get("diff_lower_steps", 5),
+                                    diff_sampling_strategy=kwargs.get("diff_sampling_strategy", "linear"))
         elif head_type == "diff_loss":
             self.diffloss = DiffLoss(token_embed_dim=self.token_embed_dim, 
                                     decoder_embed_dim=decoder_embed_dim,
                                     head_width=head_width, head_depth=head_depth,
-                                    num_sampling_steps=kwargs.get("num_sampling_steps", "50"),
+                                    # num_sampling_steps=kwargs.get("num_sampling_steps", "50"),
                                     grad_checkpointing=grad_checkpointing,
-                                    head_batch_mul=head_batch_mul)
+                                    head_batch_mul=head_batch_mul,
+                                    diff_upper_steps=kwargs.get("diff_upper_steps", 25),
+                                    diff_lower_steps=kwargs.get("diff_lower_steps", 5),
+                                    diff_sampling_strategy=kwargs.get("diff_sampling_strategy", "linear"))
         elif head_type == "gmm_wo_ar":
             # The arhead name is misleading, it is actually a GMM head without AR
             self.gmm_head = GMMHead(num_gaussians=num_gaussians, token_embed_dim=self.token_embed_dim,
@@ -379,13 +386,26 @@ class MAR(nn.Module):
             else:
                 raise NotImplementedError
 
-            sampled_token_latent = self.next_layer_sample(z, temperature=temperature, cfg=cfg_iter)
+            sampled_token_latent = self.next_layer_sample(z, temperature=temperature, cfg=cfg_iter, step=step, ar_num_iter=num_iter)
             if not cfg == 1.0:
                 sampled_token_latent, _ = sampled_token_latent.chunk(2, dim=0)  # Remove null class samples
                 mask_to_pred, _ = mask_to_pred.chunk(2, dim=0)
 
             cur_tokens[mask_to_pred.nonzero(as_tuple=True)] = sampled_token_latent
             tokens = cur_tokens.clone()
+
+            # import time
+            # import os
+            # import torch.distributed as dist
+            # torch.save({
+            #     # 'z': z,
+            #     'sampled_token_latent': sampled_token_latent
+            # }, f"/data/qinyu/research/Arinar/outputs/sampled_tokens_and_z/device_{dist.get_rank()}/debug_{time.time()}.pth")
+
+            # sampled_token_latent = self.next_layer_sample(z.repeat(100, 1), temperature=temperature, cfg=1.0)
+            # var_per_dim = sampled_token_latent.reshape(100, -1, 16).var(0).mean(0).cpu()
+            # print(var_per_dim.shape)
+            # torch.save(var_per_dim, f"/data/qinyu/research/Arinar/outputs/sampled_tokens_and_z/1000sampled/device_{dist.get_rank()}/var_per_dim_{step}_{time.time()}.pth")
 
         # unpatchify
         tokens = self.unpatchify(tokens)
@@ -415,8 +435,11 @@ def mar_large(**kwargs):
 
 
 def mar_huge(**kwargs):
+    encoder_depth = decoder_depth = kwargs.pop('enc_dec_depth')
+    if encoder_depth < 0:
+        encoder_depth = decoder_depth = 22
     model = MAR(
-        encoder_embed_dim=1280, encoder_depth=22, encoder_num_heads=16,
-        decoder_embed_dim=1280, decoder_depth=22, decoder_num_heads=16,
+        encoder_embed_dim=1280, encoder_depth=encoder_depth, encoder_num_heads=16,
+        decoder_embed_dim=1280, decoder_depth=decoder_depth, decoder_num_heads=16,
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model

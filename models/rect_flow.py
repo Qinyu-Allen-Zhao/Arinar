@@ -8,8 +8,8 @@ from typing import Callable
 
 class RectFlowHead(nn.Module):
     def __init__(self, token_embed_dim, decoder_embed_dim, 
-                 num_sampling_steps='50',
-                 head_width=1024, head_depth=6):
+                 head_width=1024, head_depth=6,
+                 diff_upper_steps=25, diff_lower_steps=5, diff_sampling_strategy="linear"):
         super(RectFlowHead, self).__init__()
         self.token_embed_dim = token_embed_dim
         self.flow_net = SimpleMLPAdaLN(
@@ -19,8 +19,11 @@ class RectFlowHead(nn.Module):
             z_channels=decoder_embed_dim,
             num_res_blocks=head_depth
         )
-        self.num_sampling_steps = int(num_sampling_steps)
-        self.sampler = 'euler_maruyama'  # 'rk2_heun', 'euler', 'rf_solver', 'euler_maruyama'
+        self.num_sampling_steps = [
+            step for step in range(diff_lower_steps, diff_upper_steps+1, 1)
+        ]
+        self.diff_sampling_strategy = diff_sampling_strategy
+        self.sampler = 'euler'  # 'rk2_heun', 'euler', 'rf_solver', 'euler_maruyama'
         self.sde_sampler = SDESampler()
     
     def forward(self, target, z, mask=None):
@@ -39,9 +42,20 @@ class RectFlowHead(nn.Module):
 
         return rec_loss
 
-    def sample(self, z, temperature=1.0, cfg=1.0):
+    def sample(self, z, temperature=1.0, cfg=1.0, step=0, ar_num_iter=64):
         x_next = torch.randn(z.size(0), self.token_embed_dim, device=z.device)
-        t_steps = torch.linspace(0.0, 1.0, self.num_sampling_steps+1, dtype=torch.float32)
+
+        upper_step = ar_num_iter - 1
+        if self.diff_sampling_strategy == "linear":
+            schedule_id = int((upper_step-step) / upper_step * (len(self.num_sampling_steps)-1))
+        elif self.diff_sampling_strategy == "cosine":
+            schedule_id = int((math.cos(math.pi * step / upper_step) + 1) / 2 * (len(self.num_sampling_steps)-1))
+        elif self.diff_sampling_strategy == "constant":
+            schedule_id = 0 # Constant schedule
+        else:
+            raise ValueError(f"Unknown sampling strategy: {self.diff_sampling_strategy}")
+        num_sampling_steps = self.num_sampling_steps[schedule_id]
+        t_steps = torch.linspace(0.0, 1.0, num_sampling_steps+1, dtype=torch.float32)
         # t_steps = torch.cat([
         #     torch.linspace(0, 0.25, 7, dtype=torch.float32),
         #     torch.linspace(0.2917, 0.7083, self.num_sampling_steps-13, dtype=torch.float32),

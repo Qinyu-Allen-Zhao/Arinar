@@ -277,6 +277,13 @@ class GaussianDiffusion:
         B, C = x.shape[:2]
         assert t.shape == (B,)
         model_output = model(x, t, **model_kwargs)
+        # import time
+        # import torch.distributed as dist
+        # th.save({
+        #     "x": x,
+        #     "t": t,
+        #     "model_output": model_output
+        # }, f"/data/qinyu/research/Arinar/outputs/sampled_tokens_and_z/device_{dist.get_rank()}/debug_{time.time()}.pth")
         if isinstance(model_output, tuple):
             model_output, extra = model_output
         else:

@@ -59,6 +59,11 @@ def get_args_parser():
     parser.add_argument('--online_eval', action='store_true')
     parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--eval_bsz', type=int, default=128, help='generation batch size')
+    # FastMAR
+    parser.add_argument('--diff_upper_steps', default=25, type=int)
+    parser.add_argument('--diff_lower_steps', default=5, type=int)
+    parser.add_argument('--diff_sampling_strategy', default="linear", type=str,
+                        help='Diffusion sampling strategy')
 
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.02,
@@ -225,6 +230,9 @@ def main(args):
 
     kwargs = {
         "num_sampling_steps": args.num_sampling_steps,
+        "diff_sampling_strategy": args.diff_sampling_strategy,
+        "diff_upper_steps": args.diff_upper_steps,
+        "diff_lower_steps": args.diff_lower_steps,
         "feature_group": args.feature_group,
         "bilevel_schedule": args.bilevel_schedule,
         "enc_dec_depth": args.enc_dec_depth,
