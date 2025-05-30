@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from models.uncond_mlp import UncondSimpleMLP
+from module.uncond_mlp import UncondSimpleMLP
 
 class GMMCovHead(nn.Module):
     def __init__(self, num_gaussians, token_embed_dim, decoder_embed_dim, width=1024, depth=6, grad_checkpointing=False):
@@ -109,7 +109,7 @@ class GMMCovHead(nn.Module):
 
         return nll + rec_loss
 
-    def sample(self, z, num_steps=100, temperature=1.0, cfg=1.0):
+    def sample(self, z, num_steps=100, temperature=1.0, cfg=1.0, **kwargs):
         with torch.cuda.amp.autocast(dtype=torch.float32):
             pred = self.net(z)
         weight, mu, L = self.extract_gmm(pred)

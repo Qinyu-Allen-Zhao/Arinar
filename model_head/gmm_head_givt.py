@@ -2,7 +2,7 @@ from math import pi
 import torch
 import torch.nn as nn
 
-from models.uncond_mlp import UncondSimpleMLP
+from module.uncond_mlp import UncondSimpleMLP
 
 
 class GMMHead(nn.Module):
@@ -47,7 +47,7 @@ class GMMHead(nn.Module):
 
         return nll
 
-    def sample(self, z, temperature=1.0, cfg=1.0):
+    def sample(self, z, temperature=1.0, cfg=1.0, **kwargs):
         assert temperature == 1.0, "Temperature is not supported for GMM sampling."
         assert cfg == 1.0, "CFG is not supported for GMM sampling."
 

@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from models.adaln import AdaLNSelfAttn
-from models.cond_mlp import SimpleMLPAdaLN
+from module.adaln import AdaLNSelfAttn
+from module.cond_mlp import SimpleMLPAdaLN
 from diffusion import create_diffusion
 
 
@@ -98,7 +98,7 @@ class ARHead_diff(nn.Module):
             loss = (loss * mask).sum() / mask.sum()
         return loss.mean()
 
-    def sample(self, z, temperature=1.0, cfg=1.0, top_p=0.99, step=0, ar_num_iter=64):
+    def sample(self, z, temperature=1.0, cfg=1.0, top_p=0.99, step=0, ar_num_iter=64, **kwargs):
         bsz = z.shape[0]
 
         start = self.cond_proj(z).unsqueeze(1) + self.start_token.expand(bsz, 1, -1)

@@ -10,14 +10,14 @@ from torch.utils.checkpoint import checkpoint
 
 from timm.models.vision_transformer import Block
 
-from models.arhead_gmm import ARHead_gmm
-from models.arhead_diff import ARHead_diff
-from models.gmm_head_givt import GMMHead
-from models.gmm_head_cov import GMMCovHead
-from models.arhead_byte import ARHead_byte
-from models.arhead_rect_flow import ARHead_rect_flow
-from models.rect_flow import RectFlowHead
-from models.diffloss import DiffLoss
+from model_head.arhead_gmm import ARHead_gmm
+from model_head.arhead_diff import ARHead_diff
+from model_head.gmm_head_givt import GMMHead
+from model_head.gmm_head_cov import GMMCovHead
+from model_head.arhead_byte import ARHead_byte
+from model_head.arhead_rect_flow import ARHead_rect_flow
+from model_head.rect_flow import RectFlowHead
+from model_head.diffloss import DiffLoss
 
 
 def mask_by_order(mask_len, order, bsz, seq_len):
@@ -111,7 +111,8 @@ class MAR(nn.Module):
                                     decoder_embed_dim=decoder_embed_dim, inner_ar_width=inner_ar_width,
                                     inner_ar_depth=inner_ar_depth, head_width=head_width, head_depth=head_depth,
                                     bilevel_schedule=kwargs.get("bilevel_schedule", "constant"),
-                                    feature_group=kwargs.get("feature_group", 1))
+                                    feature_group=kwargs.get("feature_group", 1),
+                                    use_nf=kwargs.get("use_nf", False))
         elif head_type == "ar_diff_loss":
             self.arhead = ARHead_diff(token_embed_dim=self.token_embed_dim,
                                     decoder_embed_dim=decoder_embed_dim, inner_ar_width=inner_ar_width,

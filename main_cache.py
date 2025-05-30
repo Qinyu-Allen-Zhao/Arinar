@@ -13,7 +13,7 @@ import torchvision.transforms as transforms
 import util.misc as misc
 from util.loader import ImageFolderWithFilename
 
-from models.vae import AutoencoderKL
+from backbone.vae import AutoencoderKL
 from engine_mar import cache_latents
 
 from util.crop import center_crop_arr

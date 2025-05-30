@@ -6,13 +6,14 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from models.adaln import AdaLNSelfAttn, AdaLNBeforeHead
+from module.adaln import AdaLNSelfAttn, AdaLNBeforeHead
+from module.nf import TokenNF
 
 
 class ARHead_gmm(nn.Module):
     def __init__(self, num_gaussians, token_embed_dim, decoder_embed_dim, 
                  inner_ar_width=768, inner_ar_depth=1, head_width=768, head_depth=1, 
-                 bilevel_schedule="constant", feature_group=1):
+                 bilevel_schedule="constant", feature_group=1, use_nf=False):
         super(ARHead_gmm, self).__init__()
         assert token_embed_dim % feature_group == 0, "token_embed_dim must be divisible by feature_group"
 
@@ -56,6 +57,9 @@ class ARHead_gmm(nn.Module):
 
         self.init_weights()
 
+        if use_nf:
+            self.nf = TokenNF(token_dim=self.feature_group, channels=128, num_tokens=self.num_groups, num_blocks=4, layers_per_block=1, nvp=False)
+        self.use_nf = use_nf
         self.bilevel_schedule = bilevel_schedule
 
     def extract_gmm(self, pred, bsz):
@@ -71,7 +75,12 @@ class ARHead_gmm(nn.Module):
         bsz = z.shape[0]
         start = self.cond_proj(z).unsqueeze(1) + self.start_token.expand(bsz, 1, -1)
 
-        x = torch.cat((start, self.input_proj(target.reshape(-1, self.num_groups, self.feature_group)[:, :-1])), dim=1)
+        # Transform target via Normalizing Flow
+        target = target.reshape(bsz, self.num_groups, self.feature_group)
+        if self.use_nf:
+            target, _, logdets = self.nf(target)
+
+        x = torch.cat((start, self.input_proj(target[:, :-1])), dim=1)
         x = x + self.pos_embedding.expand(bsz, -1, -1)
 
         for b in self.blocks:
@@ -82,12 +91,13 @@ class ARHead_gmm(nn.Module):
         weight, mu, logvar = self.extract_gmm(x, bsz)
 
         # Multi-variate Gaussian likelihood
-        target = target.reshape(bsz, self.num_groups, 1, self.feature_group)
-        diff = target - mu  # [bsz, num_groups, num_gaussians, feature_group]
+        diff = target.unsqueeze(-2) - mu  # [bsz, num_groups, num_gaussians, feature_group]
         log_likelihood = -0.5 * (diff**2 / logvar.exp() + logvar).sum(-1)  # [bsz, num_groups, num_gaussians]
         log_likelihood = torch.logsumexp(torch.log(weight) + log_likelihood, dim=-1)  # [bsz, num_groups]
 
         nll = -log_likelihood.sum(-1) # Calculate NLL loss
+        if self.use_nf:
+            nll = nll - logdets
         if mask is not None:
             nll = (nll * mask).sum() / mask.sum()
         else:
@@ -95,7 +105,7 @@ class ARHead_gmm(nn.Module):
 
         return nll
 
-    def sample(self, z, temperature=1.0, cfg=1.0, top_p=0.99):
+    def sample(self, z, temperature=1.0, cfg=1.0, top_p=0.99, **kwargs):
         bsz = z.shape[0]
 
         start = self.cond_proj(z).unsqueeze(1) + self.start_token.expand(bsz, 1, -1)
@@ -132,12 +142,18 @@ class ARHead_gmm(nn.Module):
                 x = torch.gather(x, -1, selected.unsqueeze(-1)).squeeze(-1)
                 x = torch.cat([x, x], dim=0)
 
+            x = x.reshape(bsz, 1, self.feature_group)
             res.append(x)
 
-            x = self.input_proj(x.reshape(bsz, 1, self.feature_group))
+            x = self.input_proj(x)
         
         for b in self.blocks: b.attn.kv_caching(False)
         res = torch.cat(res, dim=1)
+
+        # Reverse the Normalizing Flow
+        if self.use_nf:
+            res = self.nf.reverse(res)
+        res = res.flatten(1)
 
         return res
     

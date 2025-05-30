@@ -10,8 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 
-from models.arhead_gmm import ARHead_gmm
-from models.adaln import AdaLNSelfAttn, AdaLNBeforeHead
+from model_head.arhead_gmm import ARHead_gmm
+from module.adaln import AdaLNSelfAttn, AdaLNBeforeHead
 
 class SharedAdaLin(nn.Linear):
     def forward(self, cond_BD):

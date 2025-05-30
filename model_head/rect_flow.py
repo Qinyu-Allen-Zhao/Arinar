@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import sympy
-from models.cond_mlp import SimpleMLPAdaLN
+from module.cond_mlp import SimpleMLPAdaLN
 from typing import Callable
 
 
@@ -42,7 +42,7 @@ class RectFlowHead(nn.Module):
 
         return rec_loss
 
-    def sample(self, z, temperature=1.0, cfg=1.0, step=0, ar_num_iter=64):
+    def sample(self, z, temperature=1.0, cfg=1.0, step=0, ar_num_iter=64, **kwargs):
         x_next = torch.randn(z.size(0), self.token_embed_dim, device=z.device)
 
         upper_step = ar_num_iter - 1

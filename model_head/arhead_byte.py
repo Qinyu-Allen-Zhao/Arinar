@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from models.adaln import AdaLNSelfAttn, AdaLNBeforeHead
+from module.adaln import AdaLNSelfAttn, AdaLNBeforeHead
 
 
 class ByteConverter():
@@ -138,7 +138,7 @@ class ARHead_byte(nn.Module):
 
         return total_loss / self.num_bytes
 
-    def sample(self, z, temperature=1.0, cfg=1.0, top_p=0.99):
+    def sample(self, z, temperature=1.0, cfg=1.0, top_p=0.99, **kwargs):
         bsz = z.shape[0]
 
         start = self.cond_proj(z).unsqueeze(1) + self.start_token.expand(bsz, 1, -1)

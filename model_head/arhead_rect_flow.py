@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from models.adaln import AdaLNSelfAttn
-from models.cond_mlp import SimpleMLPAdaLN
+from module.adaln import AdaLNSelfAttn
+from module.cond_mlp import SimpleMLPAdaLN
 
 
 def expand_t_like_x(t, x_cur):
@@ -127,7 +127,7 @@ class ARHead_rect_flow(nn.Module):
 
         return rec_loss
 
-    def sample(self, z, temperature=1.0, cfg=1.0, guidance_low=0.0, guidance_high=1.0):
+    def sample(self, z, temperature=1.0, cfg=1.0, guidance_low=0.0, guidance_high=1.0, **kwargs):
         bsz = z.shape[0]
 
         start = self.cond_proj(z).unsqueeze(1) + self.start_token.expand(bsz, 1, -1)

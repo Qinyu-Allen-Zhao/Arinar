@@ -17,8 +17,8 @@ import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 from util.loader import CachedFolder, CachedNpzData, CachedH5FolderDev
 
-from models.vae import AutoencoderKL
-from models import mar, var
+from backbone.vae import AutoencoderKL
+from backbone import mar, var
 from engine_mar import train_one_epoch, evaluate
 import copy
 
@@ -112,6 +112,9 @@ def get_args_parser():
     parser.add_argument('--feature_group', type=int, default=1)
     parser.add_argument('--bilevel_schedule', default="constant", type=str,
                          help='use bilevel schedule for model head')
+    parser.add_argument('--use_nf', action='store_true', dest='use_nf',
+                        help='Use Normalizing Flow')
+    parser.set_defaults(use_nf=False)
 
     # Dataset parameters
     parser.add_argument('--data_path', default='./data/imagenet', type=str,
@@ -236,6 +239,7 @@ def main(args):
         "feature_group": args.feature_group,
         "bilevel_schedule": args.bilevel_schedule,
         "enc_dec_depth": args.enc_dec_depth,
+        "use_nf": args.use_nf,
     }
     if args.model.startswith('mar'):
         model = mar.__dict__[args.model](

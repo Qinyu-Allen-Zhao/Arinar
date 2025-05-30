@@ -4,7 +4,7 @@ from torch.utils.checkpoint import checkpoint
 import math
 
 from diffusion import create_diffusion
-from models.cond_mlp import SimpleMLPAdaLN
+from module.cond_mlp import SimpleMLPAdaLN
 from diffusion.dpm_solver import NoiseScheduleVP, DPM_Solver
 
 
